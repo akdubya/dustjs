@@ -312,6 +312,14 @@ exports.dustExamples = [
               "{!before!}Hello{!after!}",
     context:  {},
     expected: "Hello"
+  },
+  {
+    name:     "escaped-brackets",
+    source:   "Hello \\{foo}",
+    context:  {
+			    foo : 'bar'
+              },
+    expected: "Hello {foo}"
   }
 ];
 
