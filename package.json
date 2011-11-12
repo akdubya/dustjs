@@ -1,9 +1,9 @@
 {
-  "name"          : "dust",
-  "version"       : "0.3.0",
+  "name"          : "dust.js",
+  "version"       : "0.1.0",
   "description"   : "Asynchronous templates for the browser and node.js",
-  "author"        : "Aleksander Williams",
-  "contributors"  : [],
+  "author": "Stanislav Feldman <stanislavfeldman@gmail.com>",
+  "repository": "https://github.com/stanislavfeldman/dust.js",
   "url"           : "http://akdubya.github.com/dustjs/",
   "keywords"      : ["templates", "views"],
   "main"          : "./lib/dust",
