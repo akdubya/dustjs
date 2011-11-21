@@ -1,5 +1,5 @@
 //
-// Dust - Asynchronous Templating v0.2.0
+// Dust - Asynchronous Templating v0.3.0
 // http://akdubya.github.com/dustjs
 //
 // Copyright (c) 2010, Aleksander Williams
@@ -13,6 +13,7 @@ var dust = {};
 dust.cache = {};
 
 dust.register = function(name, tmpl) {
+  if (!name) return;
   dust.cache[name] = tmpl;
 };
 
@@ -29,17 +30,41 @@ dust.stream = function(name, context) {
   return stream;
 };
 
+dust.renderSource = function(source, context, callback) {
+  return dust.compileFn(source)(context, callback);
+};
+
+dust.compileFn = function(source, name) {
+  var tmpl = dust.loadSource(dust.compile(source, name));
+  return function(context, callback) {
+    var master = callback ? new Stub(callback) : new Stream();
+    dust.nextTick(function() {
+      tmpl(master.head, Context.wrap(context)).end();
+    });
+    return master;
+  }
+};
+
 dust.load = function(name, chunk, context) {
-  tmpl = dust.cache[name];
+  var tmpl = dust.cache[name];
   if (tmpl) {
     return tmpl(chunk, context);
   } else {
+    if (dust.onLoad) {
+      return chunk.map(function(chunk) {
+        dust.onLoad(name, function(err, src) {
+          if (err) return chunk.setError(err);
+          if (!dust.cache[name]) dust.loadSource(dust.compile(src, name));
+          dust.cache[name](chunk, context).end();
+        });
+      });
+    }
     return chunk.setError(new Error("Template Not Found: " + name));
   }
 };
 
 dust.loadSource = function(source, path) {
-  eval(source);
+  return eval(source);
 };
 
 if (Array.isArray) {
@@ -61,14 +86,14 @@ dust.isEmpty = function(value) {
 };
 
 dust.filter = function(string, auto, filters) {
-  var len = filters.length;
-
-  for (var i=0; i<len; i++) {
-    var name = filters[i];
-    if (name === "s") {
-      auto = null;
-    } else {
-      string = dust.filters[name](string);
+  if (filters) {
+    for (var i=0, len=filters.length; i<len; i++) {
+      var name = filters[i];
+      if (name === "s") {
+        auto = null;
+      } else {
+        string = dust.filters[name](string);
+      }
     }
   }
   if (auto) {
@@ -78,16 +103,9 @@ dust.filter = function(string, auto, filters) {
 };
 
 dust.filters = {
-  h: function(value) {
-    return dust.escapeHtml(value);
-  },
-
-  j: function(value) {
-    return dust.escapeJs(value);
-  },
-
+  h: function(value) { return dust.escapeHtml(value); },
+  j: function(value) { return dust.escapeJs(value); },
   u: encodeURI,
-
   uc: encodeURIComponent
 }
 
@@ -452,7 +470,7 @@ Tap.prototype.go = function(value) {
   return value;
 };
 
-var HCHARS = /[&<>\"]/,
+var HCHARS = new RegExp(/[&<>\"]/),
     AMP    = /&/g,
     LT     = /</g,
     GT     = />/g,
@@ -497,6 +515,8 @@ dust.escapeJs = function(s) {
 })(dust);
 
 if (typeof exports !== "undefined") {
-  require('./server')(dust);
+  if (typeof process !== "undefined") {
+      require('./server')(dust);
+  }
   module.exports = dust;
 }

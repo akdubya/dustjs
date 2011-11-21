@@ -1,5 +1,5 @@
 //
-// Dust - Asynchronous Templating v0.2.0
+// Dust - Asynchronous Templating v0.3.0
 // http://akdubya.github.com/dustjs
 //
 // Copyright (c) 2010, Aleksander Williams
@@ -13,6 +13,7 @@ var dust = {};
 dust.cache = {};
 
 dust.register = function(name, tmpl) {
+  if (!name) return;
   dust.cache[name] = tmpl;
 };
 
@@ -29,17 +30,41 @@ dust.stream = function(name, context) {
   return stream;
 };
 
+dust.renderSource = function(source, context, callback) {
+  return dust.compileFn(source)(context, callback);
+};
+
+dust.compileFn = function(source, name) {
+  var tmpl = dust.loadSource(dust.compile(source, name));
+  return function(context, callback) {
+    var master = callback ? new Stub(callback) : new Stream();
+    dust.nextTick(function() {
+      tmpl(master.head, Context.wrap(context)).end();
+    });
+    return master;
+  }
+};
+
 dust.load = function(name, chunk, context) {
-  tmpl = dust.cache[name];
+  var tmpl = dust.cache[name];
   if (tmpl) {
     return tmpl(chunk, context);
   } else {
+    if (dust.onLoad) {
+      return chunk.map(function(chunk) {
+        dust.onLoad(name, function(err, src) {
+          if (err) return chunk.setError(err);
+          if (!dust.cache[name]) dust.loadSource(dust.compile(src, name));
+          dust.cache[name](chunk, context).end();
+        });
+      });
+    }
     return chunk.setError(new Error("Template Not Found: " + name));
   }
 };
 
 dust.loadSource = function(source, path) {
-  eval(source);
+  return eval(source);
 };
 
 if (Array.isArray) {
@@ -61,14 +86,14 @@ dust.isEmpty = function(value) {
 };
 
 dust.filter = function(string, auto, filters) {
-  var len = filters.length;
-
-  for (var i=0; i<len; i++) {
-    var name = filters[i];
-    if (name === "s") {
-      auto = null;
-    } else {
-      string = dust.filters[name](string);
+  if (filters) {
+    for (var i=0, len=filters.length; i<len; i++) {
+      var name = filters[i];
+      if (name === "s") {
+        auto = null;
+      } else {
+        string = dust.filters[name](string);
+      }
     }
   }
   if (auto) {
@@ -78,16 +103,9 @@ dust.filter = function(string, auto, filters) {
 };
 
 dust.filters = {
-  h: function(value) {
-    return dust.escapeHtml(value);
-  },
-
-  j: function(value) {
-    return dust.escapeJs(value);
-  },
-
+  h: function(value) { return dust.escapeHtml(value); },
+  j: function(value) { return dust.escapeJs(value); },
   u: encodeURI,
-
   uc: encodeURIComponent
 }
 
@@ -452,7 +470,7 @@ Tap.prototype.go = function(value) {
   return value;
 };
 
-var HCHARS = /[&<>\"]/,
+var HCHARS = new RegExp(/[&<>\"]/),
     AMP    = /&/g,
     LT     = /</g,
     GT     = />/g,
@@ -497,7 +515,9 @@ dust.escapeJs = function(s) {
 })(dust);
 
 if (typeof exports !== "undefined") {
-  require('./server')(dust);
+  if (typeof process !== "undefined") {
+      require('./server')(dust);
+  }
   module.exports = dust;
 }
 (function(dust) {
@@ -528,6 +548,7 @@ dust.optimizers = {
   "<":       visit,
   "+":       visit,
   "@":       visit,
+  "%":       visit,
   partial:   visit,
   context:   visit,
   params:    visit,
@@ -538,6 +559,17 @@ dust.optimizers = {
   path:      noop,
   literal:   noop,
   comment:   nullify
+}
+
+dust.pragmas = {
+  esc: function(compiler, context, bodies, params) {
+    var old = compiler.auto;
+    if (!context) context = 'h';
+    compiler.auto = (context === 's') ? '' : context;
+    var out = compileParts(compiler, bodies.block);
+    compiler.auto = old;
+    return out;
+  }
 }
 
 function visit(context, node) {
@@ -592,12 +624,13 @@ function compile(ast, name) {
     auto: "h"
   }
 
-  return "(function(){dust.register(\""
-    + name + "\","
+  return "(function(){dust.register("
+    + (name ? "\"" + name + "\"" : "null") + ","
     + dust.compileNode(context, ast)
     + ");"
     + compileBlocks(context)
     + compileBodies(context)
+    + "return body_0;"
     + "})();";
 }
 
@@ -627,20 +660,22 @@ function compileBodies(context) {
   return out.join('');
 }
 
+function compileParts(context, body) {
+  var parts = '';
+  for (var i=1, len=body.length; i<len; i++) {
+    parts += dust.compileNode(context, body[i]);
+  }
+  return parts;
+}
+
 dust.compileNode = function(context, node) {
   return dust.nodes[node[0]](context, node);
 }
 
 dust.nodes = {
   body: function(context, node) {
-    var id = context.index++,
-        name = "body_" + id,
-        parts = '';
-
-    for (var i=1, len=node.length; i<len; i++) {
-      parts += dust.compileNode(context, node[i]);
-    }
-    context.bodies[id] = parts;
+    var id = context.index++, name = "body_" + id;
+    context.bodies[id] = compileParts(context, node);
     return name;
   },
 
@@ -700,6 +735,30 @@ dust.nodes = {
       + ")";
   },
 
+  "%": function(context, node) {
+    // TODO: Move these hacks into pragma precompiler
+    var name = node[1][1];
+    if (!dust.pragmas[name]) return '';
+
+    var rawBodies = node[4];
+    var bodies = {};
+    for (var i=1, len=rawBodies.length; i<len; i++) {
+      var b = rawBodies[i];
+      bodies[b[1][1]] = b[2];
+    }
+
+    var rawParams = node[3];
+    var params = {};
+    for (var i=1, len=rawParams.length; i<len; i++) {
+      var p = rawParams[i];
+      params[p[1][1]] = p[2][1];
+    }
+
+    var ctx = node[2][1] ? node[2][1].text : null;
+
+    return dust.pragmas[name](context, ctx, bodies, params);
+  },
+
   partial: function(context, node) {
     return ".partial("
       + dust.compileNode(context, node[1])
@@ -742,7 +801,8 @@ dust.nodes = {
       var filter = node[i];
       list.push("\"" + filter + "\"");
     }
-    return "\"" + context.auto + "\",[" + list.join(',') + "]";
+    return "\"" + context.auto + "\""
+      + (list.length ? ",[" + list.join(',') + "]" : '');
   },
 
   key: function(context, node) {
@@ -798,6 +858,31 @@ var parser = (function(){
       var rightmostMatchFailuresExpected = [];
       var cache = {};
       
+      function padLeft(input, padding, length) {
+        var result = input;
+        
+        var padLength = length - input.length;
+        for (var i = 0; i < padLength; i++) {
+          result = padding + result;
+        }
+        
+        return result;
+      }
+      
+      function escape(ch) {
+        var charCode = ch.charCodeAt(0);
+        
+        if (charCode < 0xFF) {
+          var escapeChar = 'x';
+          var length = 2;
+        } else {
+          var escapeChar = 'u';
+          var length = 4;
+        }
+        
+        return '\\' + escapeChar + padLeft(charCode.toString(16).toUpperCase(), '0', length);
+      }
+      
       function quote(s) {
         /*
          * ECMA-262, 5th ed., 7.8.4: All characters may appear literally in a
@@ -806,12 +891,11 @@ var parser = (function(){
          * Any character may appear in the form of an escape sequence.
          */
         return '"' + s
-          .replace(/\\/g, '\\\\')        // backslash
-          .replace(/"/g, '\\"')          // closing quote character
-          .replace(/\r/g, '\\r')         // carriage return
-          .replace(/\u2028/g, '\\u2028') // line separator
-          .replace(/\u2029/g, '\\u2029') // paragraph separator
-          .replace(/\n/g, '\\n')         // line feed
+          .replace(/\\/g, '\\\\')            // backslash
+          .replace(/"/g, '\\"')              // closing quote character
+          .replace(/\r/g, '\\r')             // carriage return
+          .replace(/\n/g, '\\n')             // line feed
+          .replace(/[\x80-\uFFFF]/g, escape) // non-ASCII characters
           + '"';
       }
       
@@ -1021,13 +1105,13 @@ var parser = (function(){
         var savedPos0 = pos;
         var result2 = parse_ld();
         if (result2 !== null) {
-          if (input.substr(pos).match(/^[#?^<+@]/) !== null) {
+          if (input.substr(pos).match(/^[#?^<+@%]/) !== null) {
             var result3 = input.charAt(pos);
             pos++;
           } else {
             var result3 = null;
             if (reportMatchFailures) {
-              matchFailed("[#?^<+@]");
+              matchFailed("[#?^<+@%]");
             }
           }
           if (result3 !== null) {
@@ -2664,13 +2748,13 @@ var parser = (function(){
         var savedPos0 = pos;
         var result3 = parse_ld();
         if (result3 !== null) {
-          if (input.substr(pos).match(/^[#?^><+%:@\/~]/) !== null) {
+          if (input.substr(pos).match(/^[#?^><+%:@\/~%]/) !== null) {
             var result4 = input.charAt(pos);
             pos++;
           } else {
             var result4 = null;
             if (reportMatchFailures) {
-              matchFailed("[#?^><+%:@\\/~]");
+              matchFailed("[#?^><+%:@\\/~%]");
             }
           }
           if (result4 !== null) {
@@ -2968,13 +3052,13 @@ var parser = (function(){
         }
         
         
-        if (input.substr(pos).match(/^[	  ﻿]/) !== null) {
+        if (input.substr(pos).match(/^[	 \xA0\uFEFF]/) !== null) {
           var result0 = input.charAt(pos);
           pos++;
         } else {
           var result0 = null;
           if (reportMatchFailures) {
-            matchFailed("[	  ﻿]");
+            matchFailed("[	 \\xA0\\uFEFF]");
           }
         }
         
