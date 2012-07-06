@@ -76,7 +76,7 @@ var benches = {
              }
   }
 
-}
+};
 
 exports.handlebarsBench = function(suite, name, id) {
   var bench = benches[name],
@@ -94,7 +94,7 @@ exports.handlebarsBench = function(suite, name, id) {
     fn(ctx, {partials: partials});
     next();
   });
-}
+};
 
 exports.handlebarsBench.benches = benches;
 
