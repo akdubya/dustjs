@@ -29,7 +29,7 @@ var benches = {
   },
 
   recursion: {
-    source:   "<%= name %> <% _.each(kids, function(kid) { %> <%= recursion %> <% }); %>",
+    source:   "<%= name %> <% _.each(kids, function(kid) { %> <%= partials.recursion({data:kid, partials:partials}) %> <% }); %>",
     context:  {
                 name: '1',
                 kids: [
@@ -41,7 +41,7 @@ var benches = {
                   }
                 ]
               },
-    partials: { recursion: "<%= name %> <% _.each(kids, function(kid) { %> <%= recursion %> <% }); %>" }
+    partials: { recursion: "<%= data.name %> <% _.each(data.kids, function(kid) { %> <%= partials.recursion({data:kid, partials:partials}) %> <% }); %>" }
   },
 
   filter: {
