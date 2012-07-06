@@ -47,8 +47,8 @@ var benches = {
   filter: {
     source:   "foo <%= filter(bar) %>",
     context:  {
-                filter: function(ctx) {
-                  return ctx.toUpperCase();
+                filter: function(str) {
+                  return str.toUpperCase();
                 },
                 bar: "bar"
               }
