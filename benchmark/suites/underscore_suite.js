@@ -79,7 +79,7 @@ var benches = {
                  {name: "blue", current: false, url: "#Blue"}
                ],
                hasItems: function(ctx) {
-                  return ctx.items.length == true;
+                  return ctx.items.length ? true : false;
                }
              }
   }
