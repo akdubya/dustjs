@@ -78,10 +78,8 @@ var benches = {
                  {name: "green", current: false, url: "#Green"},
                  {name: "blue", current: false, url: "#Blue"}
                ],
-               hasItems: function(ctx, fn) {
-                 if (ctx.items.length) {
-                   return fn(ctx);
-                 }
+               hasItems: function(ctx) {
+                  return ctx.items.length == true;
                }
              }
   }
