@@ -13,7 +13,7 @@ var benches = {
   },
 
   array: {
-    source:   "<% _.each(names, function(name) { %> <%= name %> <% }); %>",
+    source:   "<% _.each(names, function(item) { %> <%= item.name %> <% }); %>",
     context:  { names: [{name: "Moe"}, {name: "Larry"}, {name: "Curly"}, {name: "Shemp"}] }
   },
 
@@ -55,7 +55,7 @@ var benches = {
   },
 
   complex: {
-    source:  "<h1><%= header %></h1>\n" +
+    source:  "<h1><%= header() %></h1>\n" +
              "<% if(hasItems) { %>" +
              "  <% _.each(items, function(item) { %>\n" +
              "    <ul>\n" +
