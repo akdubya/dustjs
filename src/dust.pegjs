@@ -44,6 +44,8 @@ bodies "bodies"
 reference "reference"
   = ld n:identifier f:filters rd
   { return ["reference", n, f] }
+  / "\\" ld c:(!eol !rd d:. {return d})+ rd
+  {return ["buffer", "{" + c.join("") + "}"]}
 
 partial "partial"
   = ld ">" n:(k:key {return ["literal", k]} / inline) c:context "/" rd
