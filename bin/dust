@@ -1,0 +1,193 @@
+#!/usr/bin/env node
+var dust = require('../lib/dust')
+    path = require('path')
+    fs = require('fs');
+
+var argv = require('optimist')
+    .usage('Usage: $0 [-w] [-o /output_path/] /input_path/[template.dust]')
+    .alias('o', 'output')
+    .describe('o', 'Path to write compiled templates')
+    .alias('w', 'watch')
+    .describe('w', 'Compile once, watch for changes, compile again')
+    .argv;
+
+var sources = argv._;
+
+timeLog = function(message) {
+  console.log("" + ((new Date).toLocaleTimeString()) + " - " + message);
+};
+
+outputPath = function(source, base) {
+  var baseDir, dir, filename, srcDir;
+  filename = path.basename(source, path.extname(source)) + '.js';
+  srcDir = path.dirname(source);
+  baseDir = base === '.' ? srcDir : srcDir.substring(base.length);
+  dir = argv.output ? path.join(argv.output, baseDir) : srcDir;
+  return path.join(dir, filename);
+};
+
+writeJs = function(source, js, base) {
+  var compile, jsDir, jsPath;
+  jsPath = outputPath(source, base);
+  jsDir = path.dirname(jsPath);
+  compile = function() {
+    if (js.length <= 0) js = ' ';
+    fs.writeFile(jsPath, js, function(err) {
+      if (err) {
+        return process.stdout.write(err.message + '\n');
+      } else if (argv.watch) {
+        return timeLog("compiled " + source);
+      }
+    });
+  };
+  return path.exists(jsDir, function(exists) {
+    if (exists) {
+      return compile();
+    } else {
+      return exec("mkdir -p " + jsDir, compile);
+    }
+  });
+};
+
+compileTemplate = function(file, input, base) {
+  var compiled = dust.compile(input, path.basename(file, path.extname(file)));
+  if(argv.output) {
+    writeJs(file, compiled, base);
+  } else {
+    process.stdout.write(compiled + '\n');
+  }
+};
+
+watch = function(source, base) {
+  var compile, compileTimeout, prevStats, rewatch, watchErr, watcher;
+  prevStats = null;
+  compileTimeout = null;
+  watchErr = function(e) {
+    if (e.code === 'ENOENT') {
+      if (sources.indexOf(source) === -1) return;
+      try {
+        rewatch();
+        return compile();
+      } catch (e) {
+        removeSource(source, base, true);
+        return compileJoin();
+      }
+    } else {
+      throw e;
+    }
+  };
+  rewatch = function() {
+    var watcher;
+    if (typeof watcher !== "undefined" && watcher !== null) watcher.close();
+    return watcher = fs.watch(source, compile);
+  };
+  compile = function() {
+    clearTimeout(compileTimeout);
+    return compileTimeout = setTimeout(function() {
+      return fs.stat(source, function(err, stats) {
+        if (err) return watchErr(err);
+        if (prevStats && (stats.size === prevStats.size && stats.mtime.getTime() === prevStats.mtime.getTime())) {
+          return rewatch();
+        }
+        prevStats = stats;
+        return fs.readFile(source, function(err, code) {
+          if (err) return watchErr(err);
+          compileTemplate(source, code.toString(), base);
+          return rewatch();
+        });
+      });
+    }, 25);
+  };
+  try {
+    return watcher = fs.watch(source, compile);
+  } catch (e) {
+    return watchErr(e);
+  }
+};
+
+watchDir = function(source, base) {
+  var readdirTimeout, watcher;
+  readdirTimeout = null;
+  try {
+    return watcher = fs.watch(source, function() {
+      clearTimeout(readdirTimeout);
+      return readdirTimeout = wait(25, function() {
+        return fs.readdir(source, function(err, files) {
+          var file, _i, _len, _results;
+          if (err) {
+            if (err.code !== 'ENOENT') throw err;
+            watcher.close();
+            process.exit(-1);
+          }
+          files = files.map(function(file) {
+            return path.join(source, file);
+          });
+          _results = [];
+          for (_i = 0, _len = files.length; _i < _len; _i++) {
+            file = files[_i];
+            if (!(!notSources[file])) continue;
+            if (sources.some(function(s) {
+              return s.indexOf(file) >= 0;
+            })) {
+              continue;
+            }
+            sources.push(file);
+            sourceCode.push(null);
+            _results.push(compilePath(file, false, base));
+          }
+          return _results;
+        });
+      });
+    });
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+};
+
+compilePath = function(source, topLevel, base) {
+  fs.stat(source, function(err, stats) {
+    if (err && err.code !== 'ENOENT') throw err;
+    if ((err != null ? err.code : void 0) === 'ENOENT') {
+      if (topLevel && source.slice(-7) !== '.dust') {
+        source = sources[sources.indexOf(source)] = "" + source + ".dust";
+        compilePath(source, topLevel, base);
+      }
+      if (topLevel) {
+        console.error("File not found: " + source);
+        process.exit(1);
+      }
+      return;
+    }
+    if (stats.isDirectory()) {
+      if (argv.watch) watchDir(source, base);
+      fs.readdir(source, function(err, files) {
+        var file, index, _i, _len, _ref2, _results;
+        if (err && err.code !== 'ENOENT') throw err;
+        if ((err != null ? err.code : void 0) === 'ENOENT') return;
+        files = files.map(function(file) {
+          return path.join(source, file);
+        });
+        results = [];
+        for (_i = 0, _len = files.length; _i < _len; _i++) {
+          file = files[_i];
+          results.push(compilePath(file, false, base));
+        }
+        return results;
+      });
+    } else if (topLevel || path.extname(source) === '.dust') {
+      if (argv.watch) watch(source, base);
+      return fs.readFile(source, function(err, template) {
+        if (err && err.code !== 'ENOENT') throw err;
+        if ((err != null ? err.code : void 0) === 'ENOENT') return;
+        compileTemplate(source, template.toString(), base);
+      });
+    } else {
+      notSources[source] = true;
+      removeSource(source, base);
+    }
+  });
+};
+
+for(i = 0; i < sources.length; i++) {
+  compilePath(sources[i], true, path.normalize(sources[i]));
+}

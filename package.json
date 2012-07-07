@@ -7,5 +7,7 @@
   "url"           : "http://akdubya.github.com/dustjs/",
   "keywords"      : ["templates", "views"],
   "main"          : "./lib/dust",
-  "scripts"       : { "test": "make test" }
+  "scripts"       : { "test": "make test" },
+  "bin"           : "./bin/dust",
+  "dependencies"  : { "optimist": "0.3.0"}
 }
