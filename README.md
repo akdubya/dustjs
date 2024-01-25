@@ -3,7 +3,7 @@ Dust
 
 > Asynchronous templates for the browser and node.js
 
-#### <http://akdubya.github.com/dustjs> #
+#### <http://akdubya.github.io/dustjs> #
 
 Why?
 ----
@@ -16,7 +16,7 @@ Use Dust if you want these things:
 * browser/node compatibility
 * extended Mustache/ctemplate syntax
 * clean, low-level API
-* [high performance](http://akdubya.github.com/dustjs/benchmark/index.html)
+* [high performance](http://akdubya.github.io/dustjs/benchmark/index.html)
 * composable templates
 
 Composable templates?
@@ -48,4 +48,4 @@ To render compiled templates in the browser:
 Demo & Guide
 ------------
 
-Extensive docs and a full demo are available at <http://akdubya.github.com/dustjs>
+Extensive docs and a full demo are available at <http://akdubya.github.io/dustjs>
