@@ -16,7 +16,7 @@ Use Dust if you want these things:
 * browser/node compatibility
 * extended Mustache/ctemplate syntax
 * clean, low-level API
-* [high performance](http://akdubya.github.com/dustjs/benchmark/index.html)
+* high performance
 * composable templates
 
 Composable templates?
